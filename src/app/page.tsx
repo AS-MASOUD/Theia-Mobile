@@ -424,6 +424,16 @@ export default function MobileDashboard() {
         </div>
       </div>
 
+      {/* Switch to Desktop View */}
+      <div className="pt-3 pb-8 text-center">
+        <a
+          href="/?view=desktop"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#141518] border border-white/[0.08] text-xs text-[#9A9DA5] hover:text-[#F0AE55] transition-colors"
+        >
+          <span>مشاهده نسخه کامل دسکتاپ</span>
+        </a>
+      </div>
+
       {/* Transaction & Onboarding Modals */}
       <QuickTransactionModal
         isOpen={isTxModalOpen}
