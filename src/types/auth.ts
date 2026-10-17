@@ -78,7 +78,7 @@ export interface ProfileUpdateInput {
   age?: number | null;
   job?: string | null;
   bio?: string | null;
-  portfolio_suggestion?: Record<string, number>;
+  portfolio_suggestion?: Record<string, number | boolean | string>;
 }
 
 export interface AuthResponse {

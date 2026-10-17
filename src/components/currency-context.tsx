@@ -1,53 +1,84 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { formatCurrency } from "@/lib/utils";
+import { api } from "@/lib/api";
 
-type Currency = "TOMAN" | "USD";
+export type CurrencyType = "TOMAN" | "USD";
 
 interface CurrencyContextType {
-  currency: Currency;
+  currency: CurrencyType;
+  setCurrency: (c: CurrencyType) => void;
   toggleCurrency: () => void;
-  formatMoney: (amount: number | string | null | undefined) => string;
+  exchangeRate: number; // 1 USD in Toman (latest rate from API)
   usdToTomanRate: number;
+  formatMoney: (amount: number | string | null | undefined, baseCurrency?: string) => string;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | null>(null);
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const [currency, setCurrency] = useState<Currency>("TOMAN");
-  const usdToTomanRate = 92000; // Benchmark rate or synced from market API
+  const [currency, setCurrencyState] = useState<CurrencyType>("TOMAN");
+  const [exchangeRate, setExchangeRate] = useState<number>(100000);
 
   useEffect(() => {
-    const saved = localStorage.getItem("preferred_currency");
+    const saved = localStorage.getItem("preferred_currency") as CurrencyType | null;
     if (saved === "TOMAN" || saved === "USD") {
-      setCurrency(saved);
+      setCurrencyState(saved);
     }
   }, []);
+
+  // Fetch the latest USD to Toman rate from backend API (synced every 3 minutes)
+  useEffect(() => {
+    let isSubscribed = true;
+    async function fetchLiveDollarRate() {
+      try {
+        const rates = await api.getMarketRates();
+        if (rates && rates.usd_toman_rate && Number(rates.usd_toman_rate) > 0) {
+          if (isSubscribed) {
+            setExchangeRate(Number(rates.usd_toman_rate));
+          }
+        }
+      } catch {
+        // Silently preserve current exchange rate fallback if unauthenticated or offline
+      }
+    }
+    fetchLiveDollarRate();
+    const interval = setInterval(fetchLiveDollarRate, 3 * 60 * 1000);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const setCurrency = (next: CurrencyType) => {
+    setCurrencyState(next);
+    localStorage.setItem("preferred_currency", next);
+  };
 
   const toggleCurrency = () => {
     const next = currency === "TOMAN" ? "USD" : "TOMAN";
     setCurrency(next);
-    localStorage.setItem("preferred_currency", next);
   };
 
-  const formatMoney = (amount: number | string | null | undefined): string => {
-    if (amount === null || amount === undefined || amount === "") return "۰";
+  const formatMoney = (
+    amount: number | string | null | undefined,
+    baseCurrency = "TOMAN"
+  ): string => {
+    if (amount === null || amount === undefined || amount === "") {
+      return currency === "TOMAN" ? "۰ تومان" : "$0.00";
+    }
     const num = typeof amount === "string" ? parseFloat(amount) : amount;
-    if (isNaN(num)) return "۰";
+    if (isNaN(num)) return currency === "TOMAN" ? "۰ تومان" : "$0.00";
+
+    const rate = exchangeRate > 0 ? exchangeRate : 100000;
 
     if (currency === "TOMAN") {
-      return (
-        new Intl.NumberFormat("en-US", {
-          maximumFractionDigits: 0,
-        }).format(Math.round(num)) + " تومان"
-      );
+      const valInToman = baseCurrency === "USD" ? num * rate : num;
+      return formatCurrency(valInToman, "TOMAN");
     } else {
-      const inUsd = num / usdToTomanRate;
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        maximumFractionDigits: 2,
-      }).format(inUsd);
+      const valInUSD = baseCurrency === "TOMAN" ? num / rate : num;
+      return formatCurrency(valInUSD, "USD");
     }
   };
 
@@ -55,9 +86,11 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     <CurrencyContext.Provider
       value={{
         currency,
+        setCurrency,
         toggleCurrency,
+        exchangeRate,
+        usdToTomanRate: exchangeRate,
         formatMoney,
-        usdToTomanRate,
       }}
     >
       {children}
@@ -69,11 +102,13 @@ export function useCurrency() {
   const context = useContext(CurrencyContext);
   if (!context) {
     return {
-      currency: "TOMAN" as Currency,
+      currency: "TOMAN" as CurrencyType,
+      setCurrency: () => {},
       toggleCurrency: () => {},
-      formatMoney: (amount: number | string | null | undefined) =>
-        amount ? `${amount} تومان` : "۰ تومان",
-      usdToTomanRate: 92000,
+      exchangeRate: 100000,
+      usdToTomanRate: 100000,
+      formatMoney: (amount: number | string | null | undefined, baseCurrency = "TOMAN") =>
+        formatCurrency(amount, baseCurrency === "USD" ? "USD" : "TOMAN"),
     };
   }
   return context;

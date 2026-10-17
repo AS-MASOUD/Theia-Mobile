@@ -57,10 +57,13 @@ function getApiBase(): string {
       else if (clientBase.endsWith("/api")) clientBase = clientBase.slice(0, -"/api".length);
       return clientBase;
     }
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return "http://localhost:8000";
+    }
     return window.location.origin;
   }
 
-  let base = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://backend:8000";
+  let base = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   base = base.replace(/\/+$/, "");
   if (base.endsWith("/api/v1")) {
     base = base.slice(0, -"/api/v1".length);
@@ -105,6 +108,13 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   const response = await fetch(url, { ...options, headers });
   if (!response.ok) {
+    if (response.status === 401 && !endpoint.includes("/auth/login")) {
+      tokenStorage.remove();
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
+
     let errorDetail = "API request failed";
     let errorCode = "";
     try {

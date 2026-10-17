@@ -1,69 +1,62 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { User, ProfileUpdateInput, OTPResponse } from "@/types/auth";
+import {
+  User,
+  ProfileUpdateInput,
+  OTPResponse,
+  RegisterRequestOTPInput,
+  RegisterVerifyOTPInput,
+  SystemRole,
+} from "@/types/auth";
 import { api, tokenStorage } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isSysManager: boolean;
+  isAdmin: boolean;
+  isViewer: boolean;
   login: (credentials: { identifier?: string; email?: string; password: string }) => Promise<User>;
   requestOTP: (identifier: string, channel?: string) => Promise<OTPResponse>;
   loginWithOTP: (identifier: string, code: string) => Promise<User>;
-  loginAsDemo: () => void;
+  register: (payload: { email?: string; phone_number?: string; password?: string; full_name: string; code?: string }) => Promise<User>;
+  requestRegisterOTP: (payload: RegisterRequestOTPInput) => Promise<OTPResponse>;
+  registerWithOTP: (payload: RegisterVerifyOTPInput) => Promise<User>;
+  loginAsDemo: () => Promise<User>;
   logout: () => void;
   refreshProfile: () => Promise<void>;
   updateProfile: (payload: ProfileUpdateInput) => Promise<User>;
+  hasRole: (...roles: SystemRole[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const DEMO_USER: User = {
-  id: "demo-user",
-  full_name: "تئو رضایی",
-  email: "theo@personal-fc.local",
-  phone_number: "09123456789",
-  role: "user",
-  job: "مدیر ارشد سرمایه‌گذاری",
-  age: 34,
-  bio: "علاقه‌مند به بهینه‌سازی سبد دارایی‌ها، طلا و املاک",
-  is_active: true,
-  is_verified: true,
-  has_completed_financial_onboarding: true,
-  has_completed_risk_onboarding: true,
-  risk_level: "متعادل رشد",
-  risk_score: 82,
-  created_at: new Date().toISOString(),
-  liquid_assets: 450000000,
-  monthly_income: 85000000,
-  total_liabilities: 120000000,
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   const refreshProfile = useCallback(async () => {
+    const savedToken = tokenStorage.get();
+    if (!savedToken) {
+      setToken(null);
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setToken(savedToken);
     try {
-      const token = tokenStorage.get();
-      if (!token) {
-        // If demo mode was explicitly chosen in this session
-        const isDemo = typeof window !== "undefined" && sessionStorage.getItem("pfc_demo_mode") === "1";
-        if (isDemo) {
-          setUser(DEMO_USER);
-        } else {
-          setUser(null);
-        }
-        setIsLoading(false);
-        return;
-      }
       const profile = await api.getMe();
       setUser(profile);
     } catch {
       tokenStorage.remove();
+      setToken(null);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -74,72 +67,151 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshProfile();
   }, [refreshProfile]);
 
-  const login = async (credentials: { identifier?: string; email?: string; password: string }): Promise<User> => {
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("pfc_demo_mode");
-    }
-    const res = await api.login(credentials);
-    tokenStorage.set(res.access_token);
-    setUser(res.user);
-    return res.user;
-  };
+  const login = useCallback(
+    async (credentials: { identifier?: string; email?: string; password: string }): Promise<User> => {
+      const res = await api.login(credentials);
+      tokenStorage.set(res.access_token);
+      setToken(res.access_token);
+      setUser(res.user);
+      return res.user;
+    },
+    []
+  );
 
-  const requestOTP = async (identifier: string, channel?: string): Promise<OTPResponse> => {
+  const requestOTP = useCallback(async (identifier: string, channel?: string): Promise<OTPResponse> => {
     return await api.requestOTP(identifier, channel);
-  };
+  }, []);
 
-  const loginWithOTP = async (identifier: string, code: string): Promise<User> => {
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("pfc_demo_mode");
+  const loginWithOTP = useCallback(
+    async (identifier: string, code: string): Promise<User> => {
+      const res = await api.verifyOTP(identifier, code);
+      tokenStorage.set(res.access_token);
+      setToken(res.access_token);
+      setUser(res.user);
+      return res.user;
+    },
+    []
+  );
+
+  const register = useCallback(
+    async (payload: { email?: string; phone_number?: string; password?: string; full_name: string; code?: string }): Promise<User> => {
+      const res = await api.register(payload);
+      tokenStorage.set(res.access_token);
+      setToken(res.access_token);
+      setUser(res.user);
+      return res.user;
+    },
+    []
+  );
+
+  const requestRegisterOTP = useCallback(
+    async (payload: RegisterRequestOTPInput): Promise<OTPResponse> => {
+      return await api.requestRegisterOTP(payload);
+    },
+    []
+  );
+
+  const registerWithOTP = useCallback(
+    async (payload: RegisterVerifyOTPInput): Promise<User> => {
+      const res = await api.verifyRegisterOTP(payload);
+      tokenStorage.set(res.access_token);
+      setToken(res.access_token);
+      setUser(res.user);
+      return res.user;
+    },
+    []
+  );
+
+  const loginAsDemo = useCallback(async (): Promise<User> => {
+    // Authenticate with the real demo admin account on backend for full parity & live data
+    try {
+      const res = await api.login({
+        identifier: "admin@personal-fc.local",
+        password: "AdminPassword123!",
+      });
+      tokenStorage.set(res.access_token);
+      setToken(res.access_token);
+      setUser(res.user);
+      router.push("/");
+      return res.user;
+    } catch {
+      // Fallback try user account
+      const res = await api.login({
+        identifier: "user@personal-fc.local",
+        password: "AdminPassword123!",
+      });
+      tokenStorage.set(res.access_token);
+      setToken(res.access_token);
+      setUser(res.user);
+      router.push("/");
+      return res.user;
     }
-    const res = await api.verifyOTP(identifier, code);
-    tokenStorage.set(res.access_token);
-    setUser(res.user);
-    return res.user;
-  };
+  }, [router]);
 
-  const loginAsDemo = () => {
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("pfc_demo_mode", "1");
-    }
-    setUser(DEMO_USER);
-    router.push("/");
-  };
-
-  const logout = () => {
+  const logout = useCallback(() => {
     tokenStorage.remove();
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("pfc_demo_mode");
-      localStorage.removeItem("pfc_access_token");
-    }
+    setToken(null);
     setUser(null);
     router.replace("/login");
-  };
+  }, [router]);
 
-  const updateProfile = async (payload: ProfileUpdateInput): Promise<User> => {
-    const updated = await api.updateProfile(payload);
-    setUser(updated);
-    return updated;
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isLoading,
-        login,
-        requestOTP,
-        loginWithOTP,
-        loginAsDemo,
-        logout,
-        refreshProfile,
-        updateProfile,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const updateProfile = useCallback(
+    async (payload: ProfileUpdateInput): Promise<User> => {
+      const updated = await api.updateProfile(payload);
+      setUser(updated);
+      return updated;
+    },
+    []
   );
+
+  const hasRole = useCallback(
+    (...roles: SystemRole[]): boolean => {
+      if (!user) return false;
+      return roles.includes(user.role);
+    },
+    [user]
+  );
+
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      isAuthenticated: !!token && !!user,
+      isLoading,
+      isSysManager: user?.role === "sysmanager",
+      isAdmin: user?.role === "admin" || user?.role === "sysmanager",
+      isViewer: user?.role === "viewer",
+      login,
+      requestOTP,
+      loginWithOTP,
+      register,
+      requestRegisterOTP,
+      registerWithOTP,
+      loginAsDemo,
+      logout,
+      refreshProfile,
+      updateProfile,
+      hasRole,
+    }),
+    [
+      user,
+      token,
+      isLoading,
+      login,
+      requestOTP,
+      loginWithOTP,
+      register,
+      requestRegisterOTP,
+      registerWithOTP,
+      loginAsDemo,
+      logout,
+      refreshProfile,
+      updateProfile,
+      hasRole,
+    ]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

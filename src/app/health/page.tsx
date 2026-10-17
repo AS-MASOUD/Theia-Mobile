@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
+  Plus,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArcGauge } from "@/components/mobile/arc-gauge";
@@ -43,19 +44,31 @@ export default function MobileHealthPage() {
   const monthlyIncome = overview?.monthly_income ? parseFloat(overview.monthly_income) : 0;
   const monthlyDebt = overview?.monthly_debt_service ? parseFloat(overview.monthly_debt_service) : 0;
 
-  const liquidityRatio = totalAssets > 0 ? Math.round((liquidCash / totalAssets) * 100) : 42;
-  const debtToIncome = monthlyIncome > 0 ? Math.round((monthlyDebt / monthlyIncome) * 100) : 18;
+  const liquidityRatio = totalAssets > 0 ? Math.round((liquidCash / totalAssets) * 100) : 0;
+  const debtToIncome = monthlyIncome > 0 ? Math.round((monthlyDebt / monthlyIncome) * 100) : 0;
 
-  const computedHealthScore = totalAssets > 0
-    ? Math.min(Math.max(Math.round(((totalAssets - totalLiabilities) / totalAssets) * 100), 50), 96)
-    : 82;
+  // Authoritative financial health calculation
+  const computedHealthScore = useMemo(() => {
+    if (totalAssets <= 0) return 0;
+    const netAssetsRatio = Math.max(0, (totalAssets - totalLiabilities) / totalAssets);
+    const debtRatio = monthlyIncome > 0 ? monthlyDebt / monthlyIncome : 0;
+    const raw = Math.round(netAssetsRatio * 75 + Math.max(0, 1 - debtRatio) * 25);
+    return Math.min(Math.max(raw, 5), 100);
+  }, [totalAssets, totalLiabilities, monthlyIncome, monthlyDebt]);
 
-  const activeScore =
-    strategyMode === "conservative"
-      ? Math.max(computedHealthScore - 7, 70)
-      : strategyMode === "growth"
-      ? Math.min(computedHealthScore + 7, 95)
-      : computedHealthScore;
+  const activeScore = useMemo(() => {
+    if (computedHealthScore === 0) return 0;
+    if (strategyMode === "conservative") {
+      // Conservative stress test weighs liquid reserves more heavily
+      const liquidShare = totalAssets > 0 ? liquidCash / totalAssets : 0;
+      return Math.round(computedHealthScore * 0.7 + liquidShare * 30);
+    }
+    if (strategyMode === "growth") {
+      // Growth strategy factors in investment leverage
+      return Math.min(computedHealthScore + 5, 100);
+    }
+    return computedHealthScore;
+  }, [computedHealthScore, strategyMode, totalAssets, liquidCash]);
 
   const obligations = overview?.upcoming_obligations || [];
 
@@ -75,32 +88,40 @@ export default function MobileHealthPage() {
         </span>
 
         <button
-          onClick={() => queryClient.invalidateQueries()}
-          className="w-9 h-9 rounded-[14px] bg-[#141518] border border-[#282A2F] flex items-center justify-center text-[#696D77] hover:text-[#F0AE55] active:scale-95 transition-colors"
+          onClick={() => {
+            queryClient.invalidateQueries({ queryKey: ["analytics-overview"] });
+            queryClient.invalidateQueries({ queryKey: ["mobile-liabilities"] });
+          }}
+          className="w-9 h-9 rounded-[14px] bg-[#141518] border border-[#282A2F] flex items-center justify-center text-[#696D77] hover:text-[#F0AE55] active:scale-95 transition-colors cursor-pointer"
+          title="بروزرسانی داده‌ها"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isOverviewLoading ? "animate-spin text-[#F0AE55]" : ""}`} />
         </button>
       </div>
 
-      {/* Thermostat-style Circular Arc Gauge (Direct Screen 3 Translation) */}
+      {/* Thermostat-style Circular Arc Gauge */}
       <div className="obsidian-card p-5 flex flex-col items-center justify-center relative overflow-hidden">
         {/* Soft Ambient Radial Light behind Gauge */}
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_42%,rgba(240,174,85,0.12)_0%,rgba(240,174,85,0.03)_50%,transparent_75%)]" />
 
         <ArcGauge
           value={activeScore}
-          targetValue={88}
+          targetValue={85}
           label="شاخص تاب‌آوری"
-          sublabel="محاسبه‌شده بر پایه داده‌های مالی زنده"
+          sublabel={
+            activeScore > 0
+              ? "محاسبه‌شده بر پایه داده‌های مالی زنده"
+              : "پرونده مالی فاقد دارایی ثبت‌شده است"
+          }
           accentColor="amber"
           size={270}
         />
 
-        {/* 3 Strategy Mode Pills (Heat / Cool / Fan in Reference Screen 3) */}
+        {/* 3 Strategy Mode Pills */}
         <div className="flex items-center justify-center gap-2 mt-3 w-full max-w-[320px] relative z-10">
           <button
             onClick={() => setStrategyMode("conservative")}
-            className={`flex-1 flex flex-col items-center justify-center py-2 px-2 rounded-[14px] border transition-all duration-150 active:scale-95 ${
+            className={`flex-1 flex flex-col items-center justify-center py-2 px-2 rounded-[14px] border transition-all duration-150 active:scale-95 cursor-pointer ${
               strategyMode === "conservative"
                 ? "bg-[rgba(240,174,85,0.09)] border-[rgba(240,174,85,0.32)] text-[#F0AE55] shadow-[0_0_14px_rgba(240,174,85,0.18)]"
                 : "bg-[#18191D] border-[#24262C] text-[#696D77] hover:text-[#9A9DA5]"
@@ -114,7 +135,7 @@ export default function MobileHealthPage() {
 
           <button
             onClick={() => setStrategyMode("balanced")}
-            className={`flex-1 flex flex-col items-center justify-center py-2 px-2 rounded-[14px] border transition-all duration-150 active:scale-95 ${
+            className={`flex-1 flex flex-col items-center justify-center py-2 px-2 rounded-[14px] border transition-all duration-150 active:scale-95 cursor-pointer ${
               strategyMode === "balanced"
                 ? "bg-[rgba(240,174,85,0.09)] border-[rgba(240,174,85,0.32)] text-[#F0AE55] shadow-[0_0_14px_rgba(240,174,85,0.18)]"
                 : "bg-[#18191D] border-[#24262C] text-[#696D77] hover:text-[#9A9DA5]"
@@ -128,7 +149,7 @@ export default function MobileHealthPage() {
 
           <button
             onClick={() => setStrategyMode("growth")}
-            className={`flex-1 flex flex-col items-center justify-center py-2 px-2 rounded-[14px] border transition-all duration-150 active:scale-95 ${
+            className={`flex-1 flex flex-col items-center justify-center py-2 px-2 rounded-[14px] border transition-all duration-150 active:scale-95 cursor-pointer ${
               strategyMode === "growth"
                 ? "bg-[rgba(240,174,85,0.09)] border-[rgba(240,174,85,0.32)] text-[#F0AE55] shadow-[0_0_14px_rgba(240,174,85,0.18)]"
                 : "bg-[#18191D] border-[#24262C] text-[#696D77] hover:text-[#9A9DA5]"
@@ -142,7 +163,7 @@ export default function MobileHealthPage() {
         </div>
       </div>
 
-      {/* Dual Indicators Row (Humidity & Air Quality in Reference Screen 3) */}
+      {/* Dual Indicators Row */}
       <div className="grid grid-cols-2 gap-3">
         {/* Card 1: Liquidity Humidity */}
         <div className="obsidian-card p-4 flex flex-col items-center text-center">
@@ -156,7 +177,7 @@ export default function MobileHealthPage() {
             {liquidityRatio}٪
           </span>
           <span className="text-[10px] text-[#696D77] font-normal mt-0.5">
-            نسبت نقدینگی فعال
+            {liquidityRatio >= 30 ? "نقدینگی در محدوده امن" : "توصیه به تقویت سپر نقد"}
           </span>
         </div>
 
@@ -169,15 +190,15 @@ export default function MobileHealthPage() {
             کیفیت تعهدات
           </span>
           <span className="text-xl font-normal text-[#76A98C] font-number mt-0.5 drop-shadow-[0_0_8px_rgba(118,169,140,0.3)]">
-            {debtToIncome < 30 ? "عالی" : "متوسط"}
+            {debtToIncome <= 0 ? "بدون بدهی" : debtToIncome < 35 ? "عالی" : "فشار اقساط"}
           </span>
-          <span className="text-[10px] text-[#696D77] font-normal mt-0.5">
+          <span className="text-[10px] text-[#696D77] font-normal mt-0.5 font-number">
             اقساط: {debtToIncome}٪ درآمد
           </span>
         </div>
       </div>
 
-      {/* Daily Schedule / Upcoming Obligations (Screen 3 Translation) */}
+      {/* Daily Schedule / Upcoming Obligations */}
       <div className="obsidian-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -186,7 +207,7 @@ export default function MobileHealthPage() {
             </h3>
             <span className="text-sm font-semibold text-[#E8E8E8]">برنامه زمان‌بندی ماهانه</span>
           </div>
-          <span className="text-xs text-[#F0AE55] font-medium">
+          <span className="text-xs text-[#F0AE55] font-medium font-number">
             {obligations.length || liabilities?.length || 0} مورد
           </span>
         </div>

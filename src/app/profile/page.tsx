@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/components/auth-context";
 import { useCurrency } from "@/components/currency-context";
 import { api } from "@/lib/api";
+import { MobileOnboardingModal } from "@/components/mobile/onboarding-modal";
 
 export default function MobileProfilePage() {
   const { user, updateProfile, refreshProfile, logout, isAuthenticated } = useAuth();
@@ -36,6 +37,7 @@ export default function MobileProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   // Password change state
   const [oldPassword, setOldPassword] = useState("");
@@ -181,15 +183,37 @@ export default function MobileProfilePage() {
           <div className="p-2.5 rounded-[14px] bg-[#1B1D21] border border-[#282A2F] text-center">
             <span className="text-[10px] text-[#696D77] block">سطح ریسک‌پذیری</span>
             <span className="text-xs font-semibold text-[#F0AE55] mt-0.5 block">
-              {user?.risk_level || "متعادل رشد"} ({user?.risk_score || 78}/100)
+              {user?.risk_level || "متعادل"} {user?.risk_score !== null && user?.risk_score !== undefined ? `(${user.risk_score}/100)` : ""}
             </span>
           </div>
 
-          <div className="p-2.5 rounded-[14px] bg-[#1B1D21] border border-[#282A2F] text-center">
+          <div
+            onClick={() => {
+              if (!user?.has_completed_financial_onboarding) {
+                setIsOnboardingOpen(true);
+              }
+            }}
+            className={`p-2.5 rounded-[14px] bg-[#1B1D21] border border-[#282A2F] text-center transition-all ${
+              !user?.has_completed_financial_onboarding ? "cursor-pointer hover:border-[rgba(240,174,85,0.3)] active:scale-95" : ""
+            }`}
+          >
             <span className="text-[10px] text-[#696D77] block">وضعیت آنبوردینگ</span>
-            <span className="text-xs font-semibold text-[#76A98C] mt-0.5 block flex items-center justify-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>تکمیل شده</span>
+            <span
+              className={`text-xs font-semibold mt-0.5 block flex items-center justify-center gap-1 ${
+                user?.has_completed_financial_onboarding ? "text-[#76A98C]" : "text-[#F0AE55]"
+              }`}
+            >
+              {user?.has_completed_financial_onboarding ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>تکمیل شده</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>نیاز به تکمیل</span>
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -366,11 +390,17 @@ export default function MobileProfilePage() {
         <button
           type="submit"
           disabled={isChangingPassword}
-          className="w-full py-2.5 rounded-[12px] bg-[#1B1D21] border border-[#282A2F] text-[#E8E8E8] text-xs font-medium hover:border-[#32343A] active:scale-98 transition-colors disabled:opacity-60"
+          className="w-full py-2.5 rounded-[12px] bg-[#1B1D21] border border-[#282A2F] text-[#E8E8E8] text-xs font-medium hover:border-[#32343A] active:scale-98 transition-colors disabled:opacity-60 cursor-pointer"
         >
           {isChangingPassword ? "در حال به‌روزرسانی..." : "تغییر رمز عبور"}
         </button>
       </form>
+
+      {/* Financial Onboarding Modal */}
+      <MobileOnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+      />
     </div>
   );
 }
