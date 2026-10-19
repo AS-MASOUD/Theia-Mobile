@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./auth-context";
 import { CurrencyProvider } from "./currency-context";
+import { GlobalDragScroll } from "./drag-scroll-provider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -22,7 +23,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <CurrencyProvider>{children}</CurrencyProvider>
+        <CurrencyProvider>
+          <GlobalDragScroll />
+          {children}
+        </CurrencyProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

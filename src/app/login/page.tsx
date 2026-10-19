@@ -4,19 +4,21 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Wallet,
   Lock,
   Smartphone,
   KeyRound,
-  ArrowRight,
+  ArrowLeft,
   Sparkles,
-  CheckCircle2,
   AlertCircle,
   Eye,
   EyeOff,
+  Check,
+  RotateCcw,
+  Mail,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-context";
 import { normalizeDigitsToEnglish, isValidIranPhone } from "@/lib/utils";
+import { GlassAuthCard, MobileAuthTransitionState } from "@/components/mobile/glass-auth-card";
 
 export default function MobileLoginPage() {
   const { login, requestOTP, loginWithOTP, loginAsDemo, isAuthenticated, isLoading } = useAuth();
@@ -26,21 +28,24 @@ export default function MobileLoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   // OTP state
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Transition state
+  const [transitionState, setTransitionState] = useState<MobileAuthTransitionState>("idle");
+  const [statusText, setStatusText] = useState("در حال ورود به برنامه...");
   const [error, setError] = useState<string | null>(null);
 
-  // If already authenticated, redirect to home
+  // If already authenticated and not transitioning, redirect to home
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated && transitionState === "idle") {
       router.replace("/");
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, transitionState, router]);
 
   // Timer countdown
   useEffect(() => {
@@ -65,15 +70,25 @@ export default function MobileLoginPage() {
       return;
     }
 
-    setIsSubmitting(true);
+    setTransitionState("authenticating");
+    setStatusText("در حال اعتبارسنجی رمز عبور...");
+
     try {
       await login({ identifier: cleanId, password });
-      router.replace("/");
+
+      setTransitionState("success");
+      setStatusText("ورود با موفقیت انجام شد! در حال انتقال...");
+
+      setTimeout(() => {
+        setTransitionState("exiting");
+        setTimeout(() => {
+          router.replace("/");
+        }, 220);
+      }, 950);
     } catch (err: unknown) {
+      setTransitionState("error");
       const msg = err instanceof Error ? err.message : "نام کاربری یا رمز عبور اشتباه است.";
       setError(msg);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -90,7 +105,6 @@ export default function MobileLoginPage() {
       return;
     }
 
-    setIsSubmitting(true);
     try {
       const res = await requestOTP(cleanId, "sms");
       setOtpSent(true);
@@ -98,8 +112,6 @@ export default function MobileLoginPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "خطا در ارسال کد ورود";
       setError(msg);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -114,207 +126,311 @@ export default function MobileLoginPage() {
       return;
     }
 
-    setIsSubmitting(true);
+    setTransitionState("authenticating");
+    setStatusText("در حال تایید کد یکبار مصرف...");
+
     try {
       await loginWithOTP(cleanId, cleanCode);
-      router.replace("/");
+
+      setTransitionState("success");
+      setStatusText("ورود با موفقیت انجام شد! در حال انتقال...");
+
+      setTimeout(() => {
+        setTransitionState("exiting");
+        setTimeout(() => {
+          router.replace("/");
+        }, 220);
+      }, 950);
     } catch (err: unknown) {
+      setTransitionState("error");
       const msg = err instanceof Error ? err.message : "کد تایید نادرست یا منقضی شده است.";
       setError(msg);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
-  return (
-    <div className="min-h-[85vh] flex flex-col justify-center py-6 px-1 space-y-5">
-      {/* Brand Header */}
-      <div className="flex flex-col items-center text-center space-y-2.5">
-        <div className="w-13 h-13 rounded-[18px] bg-[#141518] border border-[#282A2F] flex items-center justify-center text-[#F0AE55]">
-          <Wallet className="w-6 h-6 stroke-[2]" />
-        </div>
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
-        <div>
-          <h1 className="text-xl font-semibold text-[#E8E8E8] tracking-tight">
-            مدیریت مالی تئا
-          </h1>
-          <p className="text-xs text-[#9A9DA5] mt-0.5">
-            ورود به مرکز فرماندهی دارایی‌ها و سرمایه‌گذاری
-          </p>
-        </div>
+  return (
+    <GlassAuthCard
+      transitionState={transitionState}
+      statusText={statusText}
+      onCancelSubmitting={() => setTransitionState("idle")}
+    >
+      {/* Brand Header */}
+      <div className="text-center mb-3">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-[#F4F4F5] tracking-tight">
+          خوش <span className="text-[#F0AE55]">آمدید</span>
+        </h1>
+        <p className="mt-0.5 text-xs text-[#A1A1AA]">
+          برای دسترسی به حساب خود، اطلاعات‌تان را وارد کنید
+        </p>
       </div>
 
-      {/* Auth Card */}
-      <div className="obsidian-card p-5 space-y-4">
-        {/* Mode Switcher */}
-        <div className="flex items-center gap-1 p-1 rounded-[14px] bg-[#1B1D21] border border-[#282A2F]">
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode("password");
-              setError(null);
-            }}
-            className={`flex-1 py-1.5 rounded-[10px] text-xs font-medium transition-colors ${
-              authMode === "password"
-                ? "bg-[#F0AE55] text-[#0D0E10]"
-                : "text-[#9A9DA5] hover:text-[#E8E8E8]"
-            }`}
-          >
-            رمز عبور
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode("otp");
-              setError(null);
-            }}
-            className={`flex-1 py-1.5 rounded-[10px] text-xs font-medium transition-colors ${
-              authMode === "otp"
-                ? "bg-[#F0AE55] text-[#0D0E10]"
-                : "text-[#9A9DA5] hover:text-[#E8E8E8]"
-            }`}
-          >
-            کد یکبارمصرف (OTP)
-          </button>
+      {/* Mode Switcher */}
+      <div className="flex items-center p-0.5 rounded-xl bg-[#15161A] border border-white/5 mb-2.5">
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode("password");
+            setError(null);
+          }}
+          className={`flex-1 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+            authMode === "password"
+              ? "bg-[#22242B] text-[#F0AE55] font-bold shadow-sm"
+              : "text-[#8E929E]"
+          }`}
+        >
+          رمز عبور
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode("otp");
+            setError(null);
+          }}
+          className={`flex-1 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+            authMode === "otp"
+              ? "bg-[#22242B] text-[#F0AE55] font-bold shadow-sm"
+              : "text-[#8E929E]"
+          }`}
+        >
+          کد یکبار مصرف
+        </button>
+      </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mb-2.5 p-2 rounded-xl bg-[#C77A82]/15 border border-[#C77A82]/30 text-[#E08A92] text-xs flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{error}</span>
         </div>
+      )}
 
-        {error && (
-          <div className="p-2.5 rounded-[12px] bg-[#1B1D21] border border-[#C77A82]/30 text-xs text-[#C77A82] font-normal flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+      {/* PASSWORD LOGIN FORM */}
+      {authMode === "password" && (
+        <form onSubmit={handlePasswordLogin} className="space-y-2.5">
+          <div className="space-y-1 text-right">
+            <label className="block text-xs font-medium text-[#D1D5DB]">
+              آدرس ایمیل یا شماره موبایل
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(normalizeDigitsToEnglish(e.target.value))}
+                placeholder="name@domain.com"
+                dir="ltr"
+                className="auth-input h-[44px] pr-9 pl-3 text-sm text-left font-mono"
+              />
+              <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E929E]" />
+            </div>
           </div>
-        )}
 
-        {/* Password Form */}
-        {authMode === "password" ? (
-          <form onSubmit={handlePasswordLogin} className="space-y-3.5">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-[#9A9DA5]">
-                شماره موبایل یا ایمیل
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  className="w-full pl-3.5 pr-9 py-2.5 rounded-[12px] bg-[#1B1D21] border border-[#282A2F] text-[#E8E8E8] text-xs font-number focus:border-[rgba(240,174,85,0.35)] focus:outline-none transition-colors"
-                  placeholder="0912... یا user@example.com"
-                  dir="ltr"
-                  required
-                />
-                <Smartphone className="w-4 h-4 text-[#696D77] absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none" />
-              </div>
+          <div className="space-y-1 text-right">
+            <label className="block text-xs font-medium text-[#D1D5DB]">
+              رمز عبور
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                dir="ltr"
+                className="auth-input h-[44px] pr-9 pl-9 text-sm text-left"
+              />
+              <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E929E]" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8E929E] hover:text-[#F4F4F5] p-1 cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Symmetrical Row: Remember Me & Forgot Password */}
+          <div className="flex items-center justify-between text-xs pt-0.5 select-none">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setRememberMe(!rememberMe)}
+                className={`w-4 h-4 rounded flex items-center justify-center transition-all cursor-pointer ${
+                  rememberMe
+                    ? "bg-[#F0AE55] text-[#0D0E10] shadow-sm shadow-[#F0AE55]/30"
+                    : "bg-[#18191E] border border-white/15 text-transparent"
+                }`}
+              >
+                <Check className="h-3 w-3 stroke-[3]" />
+              </button>
+              <span
+                onClick={() => setRememberMe(!rememberMe)}
+                className="text-xs text-[#A1A1AA] hover:text-[#E4E4E7] cursor-pointer"
+              >
+                مرا به خاطر بسپار
+              </span>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-[#9A9DA5]">رمز عبور</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-9 py-2.5 rounded-[12px] bg-[#1B1D21] border border-[#282A2F] text-[#E8E8E8] text-xs focus:border-[rgba(240,174,85,0.35)] focus:outline-none transition-colors"
-                  placeholder="••••••••"
-                  dir="ltr"
-                  required
-                />
-                <Lock className="w-4 h-4 text-[#696D77] absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none" />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute top-1/2 -translate-y-1/2 left-3 text-[#696D77] hover:text-[#E8E8E8] p-1"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-3 rounded-[14px] bg-[#F0AE55] hover:bg-[#F5BA6E] text-[#0D0E10] font-medium text-xs active:scale-98 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5 mt-1"
+            <Link
+              href="/forgot-password"
+              className="text-[11px] text-[#A1A1AA] hover:text-[#F0AE55] transition-colors"
             >
-              <Sparkles className="w-3.5 h-3.5 stroke-[2]" />
-              <span>{isSubmitting ? "در حال ورود..." : "ورود به حساب کاربری"}</span>
-            </button>
-          </form>
-        ) : (
-          /* OTP Form */
-          <form onSubmit={handleOTPLogin} className="space-y-3.5">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-[#9A9DA5]">شماره موبایل</label>
-              <div className="flex gap-2">
+              فراموشی رمز عبور؟
+            </Link>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full h-[44px] mt-1 rounded-2xl bg-gradient-to-r from-[#F3BE76] via-[#F0AE55] to-[#E89E3E] hover:brightness-105 active:scale-[0.99] text-[#0D0E10] font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_4px_18px_rgba(240,174,85,0.25)]"
+          >
+            <span>ورود به حساب</span>
+            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        </form>
+      )}
+
+      {/* OTP LOGIN FORM */}
+      {authMode === "otp" && (
+        <div className="space-y-2.5">
+          <div className="space-y-1 text-right">
+            <label className="block text-xs font-medium text-[#D1D5DB]">
+              شماره موبایل
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
                 <input
                   type="text"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
                   disabled={otpSent && countdown > 0}
-                  className="flex-1 px-3 py-2.5 rounded-[12px] bg-[#1B1D21] border border-[#282A2F] text-[#E8E8E8] text-xs font-number focus:border-[rgba(240,174,85,0.35)] focus:outline-none transition-colors disabled:opacity-50"
-                  placeholder="09123456789"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(normalizeDigitsToEnglish(e.target.value))}
+                  placeholder="09121111111"
                   dir="ltr"
-                  required
+                  className="auth-input h-[44px] pr-9 pl-3 text-sm text-left font-mono disabled:opacity-60"
                 />
+                <Smartphone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E929E]" />
+              </div>
+              {!otpSent && (
                 <button
                   type="button"
                   onClick={handleRequestOTP}
-                  disabled={isSubmitting || countdown > 0}
-                  className="px-3.5 rounded-[12px] bg-[#1B1D21] border border-[#282A2F] text-xs font-medium text-[#F0AE55] hover:border-[rgba(240,174,85,0.3)] disabled:opacity-50 active:scale-95 transition-colors shrink-0 font-number"
+                  disabled={!identifier.trim()}
+                  className="h-[44px] px-3.5 rounded-2xl bg-[#F0AE55] text-[#0D0E10] text-xs font-bold transition-all disabled:opacity-40 shrink-0 cursor-pointer"
                 >
-                  {countdown > 0 ? `${countdown}s` : otpSent ? "ارسال مجدد" : "دریافت کد"}
+                  ارسال کد
                 </button>
-              </div>
+              )}
             </div>
+          </div>
 
-            {otpSent && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-[#9A9DA5]">
-                  کد تایید ۵ رقمی پیامک‌شده
-                </label>
+          {otpSent && (
+            <form onSubmit={handleOTPLogin} className="space-y-2.5 pt-0.5">
+              <div className="space-y-1 text-right">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-[#D1D5DB]">
+                    کد تایید ۵ رقمی
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtpCode("");
+                    }}
+                    className="text-[11px] text-[#F0AE55] hover:underline cursor-pointer"
+                  >
+                    تغییر شماره
+                  </button>
+                </div>
                 <div className="relative">
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={5}
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-[12px] bg-[#1B1D21] border border-[rgba(240,174,85,0.25)] text-[#F0AE55] text-center text-lg font-medium tracking-widest font-number focus:border-[#F0AE55] focus:outline-none transition-colors"
+                    onChange={(e) => {
+                      const clean = normalizeDigitsToEnglish(e.target.value).replace(/\D/g, "");
+                      if (clean.length <= 5) setOtpCode(clean);
+                    }}
                     placeholder="•••••"
-                    maxLength={6}
                     dir="ltr"
-                    required
+                    autoFocus
+                    className="auth-input h-[44px] pr-9 pl-3 text-base text-[#F0AE55] text-center tracking-[0.4em] font-semibold"
                   />
-                  <KeyRound className="w-4 h-4 text-[#F0AE55]/60 absolute top-1/2 -translate-y-1/2 right-3 pointer-events-none" />
+                  <KeyRound className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E929E]" />
                 </div>
               </div>
-            )}
 
-            {otpSent && (
+              <div className="flex items-center justify-between text-xs text-[#A1A1AA]">
+                {countdown > 0 ? (
+                  <span>ارسال مجدد پس از: {formatCountdown(countdown)}</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestOTP}
+                    className="flex items-center gap-1 text-[#F0AE55] hover:underline font-medium cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>ارسال مجدد</span>
+                  </button>
+                )}
+              </div>
+
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3 rounded-[14px] bg-[#F0AE55] hover:bg-[#F5BA6E] text-[#0D0E10] font-medium text-xs active:scale-98 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5 mt-1"
+                disabled={otpCode.length < 5}
+                className="w-full h-[44px] rounded-2xl bg-gradient-to-r from-[#F3BE76] via-[#F0AE55] to-[#E89E3E] text-[#0D0E10] font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_4px_18px_rgba(240,174,85,0.25)] disabled:opacity-40"
               >
-                <span>{isSubmitting ? "در حال تایید..." : "تایید کد و ورود"}</span>
+                <span>ورود به حساب</span>
+                <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
               </button>
-            )}
-          </form>
-        )}
-
-        {/* Divider */}
-        <div className="flex items-center gap-3 pt-1">
-          <div className="flex-1 h-[1px] bg-[#282A2F]" />
-          <span className="text-[10px] text-[#696D77]">یا</span>
-          <div className="flex-1 h-[1px] bg-[#282A2F]" />
+            </form>
+          )}
         </div>
+      )}
 
-        {/* Demo Exploration Button */}
+      {/* Demo Fast Login */}
+      <div className="mt-3 pt-2.5 border-t border-white/10">
         <button
           type="button"
-          onClick={loginAsDemo}
-          className="w-full py-2.5 rounded-[12px] bg-[#1B1D21] border border-[#282A2F] hover:border-[#32343A] text-[#9A9DA5] hover:text-[#E8E8E8] text-xs font-medium flex items-center justify-center gap-1.5 active:scale-98 transition-colors"
+          onClick={async () => {
+            setTransitionState("authenticating");
+            setStatusText("در حال راه‌اندازی نشست دمو آزمایشی...");
+            try {
+              await loginAsDemo();
+              setTransitionState("success");
+              setStatusText("ورود با موفقیت انجام شد! در حال انتقال...");
+              setTimeout(() => {
+                setTransitionState("exiting");
+                setTimeout(() => {
+                  router.replace("/");
+                }, 220);
+              }, 950);
+            } catch {
+              setTransitionState("error");
+              setError("خطا در ورود به حساب دمو");
+            }
+          }}
+          className="w-full py-2 rounded-xl bg-[#15161A] hover:bg-[#1C1E23] border border-white/10 flex items-center justify-center gap-2 text-xs font-medium text-[#E4E4E7] transition-all cursor-pointer"
         >
           <Sparkles className="w-3.5 h-3.5 text-[#F0AE55]" />
-          <span>ورود سریع در حالت پیش‌نمایش (Demo)</span>
+          <span>ورود سریع آزمایشی (نسخه دمو)</span>
         </button>
       </div>
-    </div>
+
+      {/* Footer Switch */}
+      <div className="mt-3 text-center text-xs text-[#A1A1AA]">
+        <span>هنوز حساب کاربری ندارید؟ </span>
+        <Link
+          href="/register"
+          className="text-[#F0AE55] font-bold hover:underline"
+        >
+          ثبت‌نام
+        </Link>
+      </div>
+    </GlassAuthCard>
   );
 }
