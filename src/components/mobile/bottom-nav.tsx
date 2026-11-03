@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, SlidersHorizontal, Flame, Eye, Zap } from "lucide-react";
+import { Home, SlidersHorizontal, ArrowLeftRight, Zap, LayoutGrid } from "lucide-react";
 
 interface NavItem {
   href: string;
@@ -14,9 +14,9 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: "/", icon: Home, label: "خانه" },
   { href: "/portfolio", icon: SlidersHorizontal, label: "تخصیص" },
-  { href: "/health", icon: Flame, label: "اقلیم مالی" },
-  { href: "/assets", icon: Eye, label: "دارایی‌ها" },
+  { href: "/transactions", icon: ArrowLeftRight, label: "تراکنش‌ها" },
   { href: "/cashflow", icon: Zap, label: "جریان نقد" },
+  { href: "/more", icon: LayoutGrid, label: "بیشتر" },
 ];
 
 export function BottomNav() {
@@ -45,7 +45,7 @@ export function BottomNav() {
               href={item.href}
               className="relative flex flex-col items-center justify-center w-12 h-12 rounded-full transition-all duration-200 active:scale-95 group"
             >
-              {/* Soft Diffused Amber Ambient Glow behind Selected Icon (Reference Navigation) */}
+              {/* Soft Diffused Amber Ambient Glow behind Selected Icon */}
               {isActive && (
                 <div
                   className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-[radial-gradient(circle,rgba(240,174,85,0.32)_0%,rgba(240,174,85,0.08)_50%,transparent_75%)] pointer-events-none z-0"

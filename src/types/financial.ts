@@ -44,6 +44,7 @@ export interface MarketQuote {
   unit: string;
   change_percent?: number | null;
   price_toman?: number | string | null;
+  stale?: boolean | null;
   updated_at?: string | null;
 }
 

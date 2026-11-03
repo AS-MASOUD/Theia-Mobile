@@ -118,15 +118,45 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       }
     }
 
-    let errorDetail = "API request failed";
+    let errorDetail = "خطا در برقراری ارتباط با سامانه";
     let errorCode = "";
     try {
       const errorJson = await response.json();
-      errorDetail = errorJson?.error?.message || response.statusText;
-      errorCode = errorJson?.error?.code || "";
+      if (
+        errorJson?.error?.details &&
+        Array.isArray(errorJson.error.details) &&
+        errorJson.error.details.length > 0
+      ) {
+        const first = errorJson.error.details[0];
+        let msg = first?.msg || "";
+        if (msg.startsWith("Value error, ")) msg = msg.replace("Value error, ", "").trim();
+        const locStr = Array.isArray(first?.loc) ? first.loc.join(".").toLowerCase() : "";
+        if (locStr.includes("password") || msg.toLowerCase().includes("password")) {
+          msg = "رمز عبور باید حداقل ۸ کاراکتر و شامل حروف کوچک انگلیسی (a-z)، عدد و نماد یا علامت ویژه (مانند !@#$) باشد.";
+        }
+        errorDetail = msg || errorJson?.error?.message || response.statusText;
+      } else {
+        errorDetail = errorJson?.error?.message || errorJson?.message || response.statusText;
+      }
+      errorCode = errorJson?.error?.code || errorJson?.code || "";
     } catch {
       errorDetail = response.statusText;
     }
+
+    // Friendly Persian fallbacks for standard API failure messages
+    if (
+      errorDetail === "The submitted payload is invalid." ||
+      errorDetail === "API request failed" ||
+      errorDetail === "Unprocessable Entity"
+    ) {
+      errorDetail = "اطلاعات ارسالی نامعتبر است. لطفاً موارد ورودی را بررسی نمایید.";
+    } else if (
+      errorDetail.toLowerCase().includes("password must be at least 8 characters") ||
+      errorDetail.toLowerCase().includes("include lowercase letters, numbers, and symbols")
+    ) {
+      errorDetail = "رمز عبور باید حداقل ۸ کاراکتر و شامل حروف کوچک انگلیسی (a-z)، عدد و نماد یا علامت ویژه (مانند !@#$) باشد.";
+    }
+
     const err = new Error(errorDetail) as Error & { code?: string; status?: number };
     err.code = errorCode;
     err.status = response.status;
@@ -345,6 +375,7 @@ export const api = {
     request<Asset>(`/assets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteAsset: (id: string) => request<void>(`/assets/${id}`, { method: "DELETE" }),
   getMarketRates: () => request<MarketRatesResponse>("/assets/market/rates"),
+  getMarketHistory: (symbol: string) => request<any>(`/assets/market/history/${encodeURIComponent(symbol)}`),
   syncMarketRates: () => request<MarketSyncResultResponse>("/assets/market/sync", { method: "POST" }),
 
   // Transactions
@@ -378,6 +409,8 @@ export const api = {
   getEntries: (limit = 50) => request<CashflowEntry[]>(`/cashflow/entries?limit=${limit}`),
   getCashflowSummary: () => request<CashflowSummary>("/cashflow/summary"),
   createEntry: (data: Record<string, unknown>) =>
+    request<CashflowEntry>("/cashflow/entries", { method: "POST", body: JSON.stringify(data) }),
+  createCashflowEntry: (data: Record<string, unknown>) =>
     request<CashflowEntry>("/cashflow/entries", { method: "POST", body: JSON.stringify(data) }),
 
   // Goals

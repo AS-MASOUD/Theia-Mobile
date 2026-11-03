@@ -16,8 +16,11 @@ import {
   Bell,
   SlidersHorizontal,
   ChevronLeft,
-  AlertCircle,
-  HelpCircle,
+  TrendingUp,
+  Target,
+  ArrowLeftRight,
+  Globe2,
+  LayoutGrid,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-context";
@@ -26,7 +29,8 @@ import { api } from "@/lib/api";
 import { MobileCard } from "@/components/mobile/mobile-card";
 import { QuickTransactionModal } from "@/components/mobile/transaction-modal";
 import { MobileOnboardingModal } from "@/components/mobile/onboarding-modal";
-import { Transaction } from "@/types/financial";
+import { Transaction, FinancialGoal } from "@/types/financial";
+import { NotificationListResponse } from "@/types/auth";
 
 export default function MobileDashboard() {
   const { user } = useAuth();
@@ -38,7 +42,6 @@ export default function MobileDashboard() {
   const {
     data: overview,
     isLoading: isOverviewLoading,
-    error: overviewError,
     refetch: refetchOverview,
   } = useQuery({
     queryKey: ["mobile-overview"],
@@ -53,6 +56,16 @@ export default function MobileDashboard() {
   const { data: transactions, isLoading: isTxLoading } = useQuery<Transaction[]>({
     queryKey: ["mobile-recent-txs"],
     queryFn: () => api.getTransactions(6, 0),
+  });
+
+  const { data: goalsData } = useQuery<FinancialGoal[]>({
+    queryKey: ["mobile-overview-goals"],
+    queryFn: () => api.getGoals(),
+  });
+
+  const { data: notifData } = useQuery<NotificationListResponse>({
+    queryKey: ["mobile-unread-notifs"],
+    queryFn: () => api.getNotifications({ unread_only: true, limit: 5 }),
   });
 
   // Calculate authoritative values from real backend overview
@@ -105,11 +118,13 @@ export default function MobileDashboard() {
     ? overview.attention_items[0]
     : null;
 
+  const unreadCount = notifData?.unread_count || 0;
   const userName = user?.full_name || "کاربر تئا";
   const txList: Transaction[] = transactions || [];
+  const goalsList: FinancialGoal[] = goalsData || [];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-20">
       {/* Top Bar: Profile Greeting & Currency Toggle */}
       <div className="flex items-center justify-between pt-1">
         <Link href="/profile" className="flex items-center gap-3 group">
@@ -155,12 +170,17 @@ export default function MobileDashboard() {
               className={`w-3.5 h-3.5 ${isOverviewLoading ? "animate-spin text-[#F0AE55]" : ""}`}
             />
           </button>
-          <div className="w-9 h-9 rounded-[14px] bg-[#141518] border border-[#282A2F] flex items-center justify-center text-[#696D77] relative">
+
+          <Link
+            href="/notifications"
+            className="w-9 h-9 rounded-[14px] bg-[#141518] border border-[#282A2F] flex items-center justify-center text-[#696D77] hover:text-[#E8E8E8] active:scale-95 transition-colors relative"
+            title="اعلان‌ها"
+          >
             <Bell className="w-3.5 h-3.5" />
-            {attentionItem && (
+            {(unreadCount > 0 || attentionItem) && (
               <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#F0AE55] rounded-full shadow-[0_0_6px_rgba(240,174,85,0.8)]" />
             )}
-          </div>
+          </Link>
         </div>
       </div>
 
@@ -204,9 +224,18 @@ export default function MobileDashboard() {
             {overview?.upcoming_obligations?.length || 0} تعهد فعال
           </span>
         </div>
+        {unreadCount > 0 && (
+          <Link
+            href="/notifications"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[rgba(240,174,85,0.1)] border border-[rgba(240,174,85,0.25)] text-[#F0AE55] shrink-0 font-medium"
+          >
+            <Bell className="w-3 h-3" />
+            <span>{unreadCount} هشدار خوانده‌نشده</span>
+          </Link>
+        )}
       </div>
 
-      {/* Quick Scene Pills */}
+      {/* Quick Scene Pills Bar linking modules */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
         <button
           onClick={() => {
@@ -225,18 +254,58 @@ export default function MobileDashboard() {
 
         <Link
           href="/portfolio"
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] hover:border-[#32343A] transition-colors shrink-0 active:scale-95"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] transition-colors shrink-0 active:scale-95"
         >
           <SlidersHorizontal className="w-3.5 h-3.5 text-[#696D77]" />
           <span>تخصیص سبد</span>
         </Link>
 
         <Link
-          href="/health"
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] hover:border-[#32343A] transition-colors shrink-0 active:scale-95"
+          href="/wealth-trajectory"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] transition-colors shrink-0 active:scale-95"
         >
-          <Flame className="w-3.5 h-3.5 text-[#696D77]" />
-          <span>اقلیم مالی</span>
+          <TrendingUp className="w-3.5 h-3.5 text-[#696D77]" />
+          <span>مسیر ثروت</span>
+        </Link>
+
+        <Link
+          href="/transactions"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] transition-colors shrink-0 active:scale-95"
+        >
+          <ArrowLeftRight className="w-3.5 h-3.5 text-[#696D77]" />
+          <span>تراکنش‌ها</span>
+        </Link>
+
+        <Link
+          href="/liabilities"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] transition-colors shrink-0 active:scale-95"
+        >
+          <ShieldAlert className="w-3.5 h-3.5 text-[#696D77]" />
+          <span>بدهی‌ها</span>
+        </Link>
+
+        <Link
+          href="/goals"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] transition-colors shrink-0 active:scale-95"
+        >
+          <Target className="w-3.5 h-3.5 text-[#696D77]" />
+          <span>اهداف</span>
+        </Link>
+
+        <Link
+          href="/markets"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] transition-colors shrink-0 active:scale-95"
+        >
+          <Globe2 className="w-3.5 h-3.5 text-[#696D77]" />
+          <span>بازارها</span>
+        </Link>
+
+        <Link
+          href="/more"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[14px] text-xs font-medium bg-[#141518] text-[#9A9DA5] border border-[#282A2F] hover:text-[#E8E8E8] transition-colors shrink-0 active:scale-95"
+        >
+          <LayoutGrid className="w-3.5 h-3.5 text-[#696D77]" />
+          <span>همه ابزارها</span>
         </Link>
       </div>
 
@@ -255,7 +324,7 @@ export default function MobileDashboard() {
           badgeVariant="amber"
           icon={Wallet}
           iconColor="amber"
-          href="/cashflow"
+          href="/wealth-trajectory"
         />
 
         {/* Card 2: Financial Climate */}
@@ -273,7 +342,7 @@ export default function MobileDashboard() {
           badgeVariant={healthScore >= 75 ? "amber" : "neutral"}
           icon={Flame}
           iconColor="amber"
-          href="/health"
+          href="/analytics"
         />
 
         {/* Card 3: Free Liquidity */}
@@ -303,7 +372,7 @@ export default function MobileDashboard() {
           badgeVariant={totalLiabilities > 0 ? "coral" : "emerald"}
           icon={ShieldAlert}
           iconColor="coral"
-          href="/health"
+          href="/liabilities"
         />
 
         {/* Card 5: Emergency Lock */}
@@ -318,20 +387,20 @@ export default function MobileDashboard() {
           href="/portfolio"
         />
 
-        {/* Card 6: AI Assistant / Attention Insights */}
+        {/* Card 6: AI Assistant */}
         <MobileCard
           title="مشاور تئا"
           value={attentionItem ? attentionItem.title : "توازن پایدار سبد"}
           subtitle={
             attentionItem
               ? attentionItem.message.slice(0, 32) + "..."
-              : "بر اساس تحلیل ساختار دارایی‌ها"
+              : "مشاوره و تحلیل ساختار دارایی‌ها"
           }
           badge={attentionItem ? "هشدار" : "پایش"}
           badgeVariant="neutral"
           icon={Sparkles}
           iconColor="neutral"
-          href="/health"
+          href="/ai"
         />
       </div>
 
@@ -355,11 +424,57 @@ export default function MobileDashboard() {
         </button>
       </div>
 
+      {/* Financial Goals Preview (Module 7 Integration) */}
+      {goalsList.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5 text-[#F0AE55]" />
+              <h2 className="text-xs font-medium text-[#9A9DA5]">اهداف مالی فعال</h2>
+            </div>
+            <Link href="/goals" className="text-[11px] text-[#F0AE55] font-medium hover:underline">
+              مدیریت اهداف
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            {goalsList.slice(0, 2).map((goal) => {
+              const current = parseFloat(goal.current_amount || "0");
+              const target = parseFloat(goal.target_amount || "1");
+              const pct = Math.min(100, Math.round((current / target) * 100));
+
+              return (
+                <Link
+                  key={goal.id}
+                  href="/goals"
+                  className="obsidian-card p-3 space-y-2 block hover:border-[#F0AE55]/40 transition-colors"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-[#E8E8E8]">{goal.name}</span>
+                    <span className="text-[#F0AE55] font-bold font-number">{pct}٪</span>
+                  </div>
+                  <div className="w-full bg-[#1C1E23] h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-[#F0AE55] to-[#E59835] h-full rounded-full transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-[#696D77]">
+                    <span>تأمین‌شده: {formatMoney(current)}</span>
+                    <span>هدف: {formatMoney(target)}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Recent Cash Activity from real database */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-medium text-[#9A9DA5]">آخرین رویدادهای مالی</h2>
-          <Link href="/cashflow" className="text-[11px] text-[#F0AE55] font-medium hover:underline">
+          <h2 className="text-xs font-medium text-[#9A9DA5]">آخرین تراکنش‌های مالی</h2>
+          <Link href="/transactions" className="text-[11px] text-[#F0AE55] font-medium hover:underline">
             مشاهده دفتر کل
           </Link>
         </div>
@@ -425,7 +540,7 @@ export default function MobileDashboard() {
       </div>
 
       {/* Switch to Desktop View */}
-      <div className="pt-3 pb-8 text-center">
+      <div className="pt-2 pb-4 text-center">
         <a
           href="/?view=desktop"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#141518] border border-white/[0.08] text-xs text-[#9A9DA5] hover:text-[#F0AE55] transition-colors"
